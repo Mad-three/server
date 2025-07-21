@@ -8,6 +8,8 @@ services:
       - "3001:3001"
     volumes:
       - ./src:/usr/src/app/src
+    env_file:
+      - .env
     environment:
       - DB_HOST=db
       - DB_USER=root
