@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const searchController = require('../controllers/search.controller.js');
-// 검색 API는 로그인이 필수가 아니지만, 로그인했다면 더 정확한 정보를 주기 위해
-// 토큰을 검증하되, 없어도 통과시키는 새로운 미들웨어가 필요합니다.
-// 일단은 미들웨어 없이 진행하고, 추후 'isLiked' 정보가 필요할 때 미들웨어를 추가할 수 있습니다.
 
-// 이벤트 검색 라우트
-router.get('/events', searchController.searchEvents);
+// 검색 라우트 설정
+
+// 1. 키워드로 이벤트 검색 (예: /api/search?keyword=공연)
+router.get('/', searchController.searchEvents);
+
+// 2. 카테고리 ID로 이벤트 검색 (예: /api/search/category/3)
+router.get('/category/:categoryId', searchController.searchByCategory);
 
 module.exports = router; 
