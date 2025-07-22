@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const cryptoUtil = require('../utils/crypto.util');
 
+const sequelize = db.sequelize;
 const Event = db.Event;
 const Category = db.Category;
 const User = db.User;

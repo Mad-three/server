@@ -10,7 +10,7 @@ services:
       - ./src:/usr/src/app/src
       - ./uploads:/usr/src/app/uploads
     env_file:
-      - ./.env
+      - .env
     environment:
       - DB_HOST=db
       - DB_USER=root
