@@ -42,6 +42,9 @@ app.use('/api/search', searchRoutes);
 const topLevelReviewRoutes = require('./routes/topLevelReview.routes');
 app.use('/api/reviews', topLevelReviewRoutes);
 
+const mapRoutes = require('./routes/map.routes'); // map.routes.js 임포트
+app.use('/api/maps', mapRoutes); // mapRoutes 등록
+
 app.get('/', (req, res) => {
   res.send('Hello, EventMap Server!');
 });

@@ -15,11 +15,11 @@ module.exports = {
     ];
 
     for (const category of categories) {
-      const existingCategory = await queryInterface.rawSelect('categories', {
+      const existingCategory = await queryInterface.findOne('categories', {
         where: {
           name: category.name,
         },
-      }, ['name']);
+      });
 
       if (!existingCategory) {
         await queryInterface.bulkInsert('categories', [category], {});
@@ -29,6 +29,6 @@ module.exports = {
 
   async down (queryInterface, Sequelize) {
     // 모든 카테고리를 삭제합니다.
-    await queryInterface.bulkDelete('categories', null, {});
+    await queryInterface.bulkDelete('categories', {}, {});
   }
 };
