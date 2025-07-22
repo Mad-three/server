@@ -3,6 +3,15 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const categoriesResult = await queryInterface.rawSelect('categories', {
+      where: {},
+    }, ['name']);
+
+    if (categoriesResult) {
+      console.log('Categories already seeded.');
+      return;
+    }
+
     const categories = [
       { name: '마켓', createdAt: new Date(), updatedAt: new Date() },
       { name: '전시', createdAt: new Date(), updatedAt: new Date() },
@@ -14,17 +23,7 @@ module.exports = {
       { name: '기타', createdAt: new Date(), updatedAt: new Date() }
     ];
 
-    for (const category of categories) {
-      const existingCategory = await queryInterface.rawSelect('categories', {
-        where: {
-          name: category.name,
-        },
-      }, ['name']);
-
-      if (!existingCategory) {
-        await queryInterface.bulkInsert('categories', [category], {});
-      }
-    }
+    await queryInterface.bulkInsert('categories', categories, {});
   },
 
   async down (queryInterface, Sequelize) {

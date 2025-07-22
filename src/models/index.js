@@ -28,13 +28,13 @@ db.User = require('./user.model.js')(sequelize, Sequelize);
 
 // 이벤트 - 카테고리 (다대다)
 db.Event.belongsToMany(db.Category, {
-  through: 'categories', // 연결 테이블의 이름
+  through: 'EventCategories', // 연결 테이블의 이름
   foreignKey: 'eventId',
   otherKey: 'categoryId',
   timestamps: false,
 });
 db.Category.belongsToMany(db.Event, {
-  through: 'categories', // 연결 테이블의 이름
+  through: 'EventCategories', // 연결 테이블의 이름
   foreignKey: 'categoryId',
   otherKey: 'eventId',
   timestamps: false,

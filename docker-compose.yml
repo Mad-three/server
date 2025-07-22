@@ -6,6 +6,8 @@ services:
     restart: always
     ports:
       - "3001:3001"
+    networks:
+      - eventmap-network
     volumes:
       - ./src:/usr/src/app/src
       - ./uploads:/usr/src/app/uploads
@@ -19,6 +21,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    command: sh -c "npm run migrate && npm run seed && npm start"
 
   db:
     image: postgres:16
@@ -31,9 +34,15 @@ services:
       - "5432:5432"
     volumes:
       - ./db-data:/var/lib/postgres
+    networks:
+      - eventmap-network
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "eventmap", "-d", "eventmap"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+
+networks:
+  eventmap-network:
+    driver: bridge
