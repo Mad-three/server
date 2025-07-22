@@ -8,7 +8,7 @@ const getCoordsFromAddress = async (req, res) => {
   }
 
   try {
-    const response = await axios.get('https://naveropenapi.apigw.gov-ntruss.com/map-geocode/v2/geocode', {
+    const response = await axios.get('https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode', {
       params: {
         query: address,
       },
