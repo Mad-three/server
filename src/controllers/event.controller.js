@@ -5,19 +5,24 @@ const axios = require('axios');
 const cryptoUtil = require('../utils/crypto.util');
 
 /**
- * JavaScript Date 객체를 'YYYYMMDDTHHMMSS' 형식의 KST 문자열로 변환하는 헬퍼 함수
+ * JavaScript Date 객체를 'YYYYMMDDTHHMMSS' 형식의 KST 문자열로 변환합니다.
+ * UTC로 저장된 DB 시간과 서버 환경의 시간대에 관계없이 정확한 KST를 계산합니다.
  * @param {Date} date - 변환할 Date 객체
- * @returns {string} 'YYYYMMDDTHHMMSS' 형식의 문자열
+ * @returns {string}
  */
 function toNaverCalendarFormat(date) {
+  // KST는 UTC+9시간이므로, UTC 시간에 9시간을 더합니다.
+  const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+
   const pad = (num) => num.toString().padStart(2, '0');
 
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
+  // getUTC...() 메서드를 사용하여 시간대 변환의 영향을 받지 않고 정확한 값을 추출합니다.
+  const year = kstDate.getUTCFullYear();
+  const month = pad(kstDate.getUTCMonth() + 1);
+  const day = pad(kstDate.getUTCDate());
+  const hours = pad(kstDate.getUTCHours());
+  const minutes = pad(kstDate.getUTCMinutes());
+  const seconds = pad(kstDate.getUTCSeconds());
 
   return `${year}${month}${day}T${hours}${minutes}${seconds}`;
 }
@@ -312,27 +317,28 @@ exports.addEventToNaverCalendar = async (req, res) => {
     const user = await db.User.findByPk(userId);
     const event = await Event.findByPk(eventId);
 
-    if (!user || !event) {
-        return res.status(404).send({ message: "사용자를 찾을 수 없습니다." });
-    }
+    if (!user) return res.status(404).send({ message: "사용자를 찾을 수 없습니다." });
+    if (!event) return res.status(404).send({ message: "이벤트를 찾을 수 없습니다." });
     if (!user.naverAccessToken) return res.status(400).send({ message: "네이버 연동 정보가 없습니다. 다시 로그인하여 연동해주세요." });
 
-    // ★★★ 바로 이 부분에서 명시적으로 Date 객체로 변환합니다. ★★★
+    // 1. DB에서 온 값이 문자열일 경우를 대비해 명시적으로 Date 객체로 변환
     const startDate = new Date(event.startAt);
     const endDate = new Date(event.endAt);
 
-    // 유효한 Date 객체인지 확인하는 방어 코드 추가
+    // 2. 날짜 유효성 검사 (Invalid Date 방지)
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return res.status(500).send({ message: '이벤트의 날짜 형식이 올바르지 않습니다.' });
+      console.error(`Invalid date format for eventId: ${eventId}`, { startAt: event.startAt, endAt: event.endAt });
+      return res.status(500).send({ message: '이벤트의 날짜 형식이 올바르지 않습니다.' });
     }
 
     const decryptedAccessToken = cryptoUtil.decrypt(user.naverAccessToken);
 
     const apiRequest = async (accessToken) => {
+      // 3. iCalendar 데이터 생성 (모든 규격 수정)
       const scheduleIcalString = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:EventMap', // PRODID를 서비스 이름으로 변경하는 것을 추천
+        'PRODID:EventMap/1.0', // 고유한 PRODID로 수정
         'CALSCALE:GREGORIAN',
         'BEGIN:VTIMEZONE',
         'TZID:Asia/Seoul',
@@ -344,32 +350,32 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'END:STANDARD',
         'END:VTIMEZONE',
         'BEGIN:VEVENT',
-        `UID:${uuidv4()}@eventmap.com`, // UID를 더 고유하게 변경하는 것을 추천
-        // toNaverCalendarFormat 함수를 사용하여 날짜 형식을 올바르게 변환합니다.
-        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(startDate)}`,
-        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(endDate)}`,
+        `UID:${uuidv4()}@eventmap.com`, // UID를 더 고유한 형식으로 수정
+        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(startDate)}`, // 날짜 형식 수정
+        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(endDate)}`,     // 날짜 형식 수정
         `SUMMARY:${event.title}`,
         `DESCRIPTION:${event.description || ''}`,
         `LOCATION:${event.location || ''}`,
         'END:VEVENT',
         'END:VCALENDAR'
-      ].join('\\r\\n'); // 줄바꿈 문자도 \r\n으로 수정하는 것을 추천
+      ].join('\\r\\n'); // 줄바꿈 문자를 표준인 \r\n으로 수정
 
+      // 4. API 요청 형식 수정 (공식 문서 기준)
       const apiUrl = 'https://openapi.naver.com/calendar/createSchedule.json';
+      
+      const params = new URLSearchParams();
+      params.append('calendarId', 'defaultCalendarId');
+      params.append('scheduleIcalString', scheduleIcalString);
+
       const headers = {
         'Authorization': `Bearer ${accessToken}`,
-        // 공식 문서에서 요구하는 Content-Type을 명시적으로 설정합니다.
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
       };
 
-      const data = {
-        calendarId: 'defaultCalendarId',
-        scheduleIcalString: scheduleIcalString
-      };
-
-      return await axios.post(apiUrl, data, { headers });
+      return await axios.post(apiUrl, params, { headers });
     };
 
+    // ... (기존의 토큰 갱신 및 API 호출 로직)
     try {
       const response = await apiRequest(decryptedAccessToken);
       return res.status(201).send({ message: '네이버 캘린더에 일정이 성공적으로 추가되었습니다.', result: response.data });
@@ -381,6 +387,7 @@ exports.addEventToNaverCalendar = async (req, res) => {
       }
       throw error;
     }
+
   } catch (error) {
     console.error('네이버 캘린더 연동 중 에러:', error.response ? error.response.data : error.message);
     const message = error.message.includes('토큰 갱신에 실패')
