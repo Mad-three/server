@@ -37,8 +37,10 @@ exports.create = async (req, res) => {
 
     // [롤백] categoryIds가 배열 형태로 온다고 가정 (기존 로직)
     if (categoryIds && categoryIds.length > 0) {
+      // multipart/form-data로 전달된 categoryIds는 문자열이므로 JSON 파싱이 필요합니다.
+      const parsedCategoryIds = JSON.parse(categoryIds);
       const categories = await Category.findAll({
-        where: { categoryId: { [Op.in]: categoryIds } },
+        where: { categoryId: { [Op.in]: parsedCategoryIds } },
         transaction: t
       });
       await event.setCategories(categories, { transaction: t });
