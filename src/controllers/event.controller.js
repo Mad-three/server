@@ -31,6 +31,7 @@ const User = db.User;
 
 // 1. 새 이벤트 생성 (POST /api/events) - 트랜잭션은 유지
 exports.create = async (req, res) => {
+  console.log('Received request body:', req.body);
   const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
   const userId = req.user.userId;
   const imageUrl = req.file ? `/${req.file.path.replace(/\\/g, '/')}` : null;
