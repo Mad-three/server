@@ -5,6 +5,9 @@ const cors = require('cors'); // cors 라이브러리 불러오기
 const app = express();
 const port = 3001;
 
+// '/uploads' 경로로 들어오는 요청에 대해 'uploads' 디렉토리의 파일을 제공합니다.
+app.use('/uploads', express.static('uploads'));
+
 // CORS 설정
 const corsOptions = {
   origin: 'http://localhost:3000', // 허용할 출처
