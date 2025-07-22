@@ -17,8 +17,6 @@ module.exports = (sequelize, DataTypes) => {
     // 모델의 옵션 정의
     timestamps: true, // createdAt, updatedAt 컬럼 자동 생성
     tableName: 'categories', // 실제 데이터베이스 테이블 이름
-    charset: 'utf8mb4',
-    collate: 'utf8mb4_general_ci',
   });
 
   return Category;
