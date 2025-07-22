@@ -13,25 +13,26 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - DB_USER=root
-      - DB_PASSWORD=yourpassword
+      - DB_USER=eventmap
+      - DB_PASSWORD=eventmap
       - DB_NAME=eventmap
     depends_on:
       db:
         condition: service_healthy
 
   db:
-    image: mysql:8.0
+    image: postgres:16
     restart: always
     environment:
-      MYSQL_DATABASE: 'eventmap'
-      MYSQL_ROOT_PASSWORD: 'yourpassword'
+      POSTGRES_DB: 'eventmap'
+      POSTGRES_USER: 'eventmap'
+      POSTGRES_PASSWORD: 'eventmap'
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - ./db-data:/var/lib/mysql
+      - ./db-data:/var/lib/postgres
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "pg_isready", "-U", "eventmap", "-d", "eventmap"]
       interval: 10s
       timeout: 5s
       retries: 5
