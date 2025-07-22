@@ -15,11 +15,11 @@ module.exports = {
     ];
 
     for (const category of categories) {
-      const existingCategory = await queryInterface.findOne('categories', {
+      const existingCategory = await queryInterface.rawSelect('categories', {
         where: {
           name: category.name,
         },
-      });
+      }, ['name']);
 
       if (!existingCategory) {
         await queryInterface.bulkInsert('categories', [category], {});
