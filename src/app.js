@@ -3,7 +3,8 @@ const db = require('./models');
 const cors = require('cors'); // cors 라이브러리 불러오기
 
 const app = express();
-const port = 3001;
+// [수정] Render에서 제공하는 PORT 환경 변수를 사용하고, 없을 경우 3001을 기본값으로 사용
+const port = process.env.PORT || 3001;
 
 // '/uploads' 경로로 들어오는 요청에 대해 'uploads' 디렉토리의 파일을 제공합니다.
 app.use('/uploads', express.static('uploads'));

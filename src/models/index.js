@@ -45,11 +45,11 @@ db.Event.hasMany(db.Review, { foreignKey: 'eventId', onDelete: 'CASCADE' });
 db.Review.belongsTo(db.Event, { foreignKey: 'eventId' });
 
 // 사용자 - 이벤트 (일대다 - 작성자 관계)
-db.User.hasMany(db.Event, { foreignKey: 'userId', as: 'AuthoredEvents' });
+db.User.hasMany(db.Event, { foreignKey: 'userId', onDelete: 'CASCADE', as: 'AuthoredEvents' });
 db.Event.belongsTo(db.User, { foreignKey: 'userId', as: 'Author' });
 
 // 사용자 - 후기 (일대다)
-db.User.hasMany(db.Review, { foreignKey: 'userId' });
+db.User.hasMany(db.Review, { foreignKey: 'userId', onDelete: 'CASCADE' });
 db.Review.belongsTo(db.User, { foreignKey: 'userId' });
 
 // 사용자 - 이벤트 (다대다 - '좋아요' 관계)
