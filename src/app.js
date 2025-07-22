@@ -9,22 +9,32 @@ const port = process.env.PORT || 3001;
 // '/uploads' 경로로 들어오는 요청에 대해 'uploads' 디렉토리의 파일을 제공합니다.
 app.use('/uploads', express.static('uploads'));
 
-// CORS 설정
+// [수정] CORS 설정을 동적으로 관리
+const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 const corsOptions = {
-  origin: 'http://localhost:3000', // 허용할 출처
-  credentials: true, // 쿠키 등 자격 증명 허용
+  origin: allowedOrigins,
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
 };
-app.use(cors(corsOptions));
+
+// Pre-flight 요청과 실제 요청 모두에 동일한 CORS 정책 적용
+app.options('*', cors(corsOptions)); // Pre-flight 요청 처리
+app.use(cors(corsOptions)); // 실제 요청 처리
+
+// [수정] 파일 업로드 라우트를 JSON 파서보다 먼저 등록하여 "Boundary not found" 에러 해결
+const eventRoutes = require('./routes/event.routes');
+app.use('/api/events', eventRoutes);
 
 // JSON 형식의 요청 본문을 파싱하기 위한 미들웨어 설정
 app.use(express.json());
 
-// 라우터 등록
+// 나머지 라우터 등록
 const categoryRoutes = require('./routes/category.routes');
 app.use('/api/categories', categoryRoutes); // '/api/categories' 경로로 오는 요청은 categoryRoutes가 처리
-
-const eventRoutes = require('./routes/event.routes');
-app.use('/api/events', eventRoutes);
 
 const reviewRoutes = require('./routes/review.routes');
 // '/api/events/:eventId/reviews' 경로로 오는 요청은 reviewRoutes가 처리
