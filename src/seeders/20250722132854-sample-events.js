@@ -3,10 +3,14 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // 먼저 기존 유저와 카테고리를 조회합니다.
-    // 실제로는 seeder 실행 순서에 의존하지 않도록,
-    // 이 자리에서 필요한 user나 category를 조회하거나 생성하는 로직을 넣는 것이 더 안정적입니다.
-    // 여기서는 편의상 ID가 존재한다고 가정합니다.
+    const events = await queryInterface.rawSelect('events', {
+      where: {},
+    }, ['eventId']);
+
+    if (events) {
+      return;
+    }
+
     await queryInterface.bulkInsert('events', [
       {
         userId: 1, // 테스트유저1
@@ -49,8 +53,8 @@ module.exports = {
       },
     ], {});
 
-    // 이벤트와 카테고리를 연결하는 데이터 (categories 중간 테이블)
-    await queryInterface.bulkInsert('categories', [
+    // 이벤트와 카테고리를 연결하는 데이터 (EventCategories 중간 테이블)
+    await queryInterface.bulkInsert('EventCategories', [
       { eventId: 1, categoryId: 5, createdAt: new Date(), updatedAt: new Date() }, // 한강 나이트워크 -> 경기
       { eventId: 1, categoryId: 4, createdAt: new Date(), updatedAt: new Date() }, // 한강 나이트워크 -> 축제
       { eventId: 2, categoryId: 6, createdAt: new Date(), updatedAt: new Date() }, // 푸드위크 -> 박람회

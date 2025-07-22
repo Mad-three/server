@@ -8,6 +8,6 @@ const searchController = require('../controllers/search.controller.js');
 router.get('/', searchController.searchEvents);
 
 // 2. 카테고리 ID로 이벤트 검색 (예: /api/search/category/3)
-router.get('/category/:categoryId', searchController.searchByCategory);
+// router.get('/category/:categoryId', searchController.searchByCategory);
 
 module.exports = router; 

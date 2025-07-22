@@ -4,6 +4,12 @@ const eventController = require('../controllers/event.controller.js');
 const verifyToken = require('../middlewares/auth.middleware.js');
 const upload = require('../middlewares/upload.middleware.js');
 
+// 하위 라우터 import
+const reviewRoutes = require('./review.routes');
+
+// '/:eventId/reviews' 경로에 대한 요청을 reviewRoutes로 전달
+router.use('/:eventId/reviews', reviewRoutes);
+
 // 이벤트 라우트 설정
 
 // 1. 새 이벤트 생성 (로그인 필요)
