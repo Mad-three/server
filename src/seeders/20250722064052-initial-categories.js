@@ -28,7 +28,7 @@ module.exports = {
   },
 
   async down (queryInterface, Sequelize) {
-    // 모든 카테고리를 삭제합니다.
-    await queryInterface.bulkDelete('categories', {}, {});
+    // categories 테이블과 연관된 모든 테이블의 데이터를 지우고 ID 카운터를 리셋합니다.
+    await queryInterface.sequelize.query('TRUNCATE "categories" RESTART IDENTITY CASCADE;');
   }
 };

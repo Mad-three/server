@@ -49,8 +49,8 @@ module.exports = {
       },
     ], {});
 
-    // 이벤트와 카테고리를 연결하는 데이터 (EventCategory 중간 테이블)
-    await queryInterface.bulkInsert('EventCategory', [
+    // 이벤트와 카테고리를 연결하는 데이터 (categories 중간 테이블)
+    await queryInterface.bulkInsert('categories', [
       { eventId: 1, categoryId: 5, createdAt: new Date(), updatedAt: new Date() }, // 한강 나이트워크 -> 경기
       { eventId: 1, categoryId: 4, createdAt: new Date(), updatedAt: new Date() }, // 한강 나이트워크 -> 축제
       { eventId: 2, categoryId: 6, createdAt: new Date(), updatedAt: new Date() }, // 푸드위크 -> 박람회
@@ -60,8 +60,7 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    // 연결 테이블 데이터 먼저 삭제
-    await queryInterface.bulkDelete('EventCategory', null, {});
-    await queryInterface.bulkDelete('events', null, {});
+    // 이 테이블의 데이터는 다른 시더의 CASCADE 옵션에 의해 자동으로 삭제되므로
+    // 여기서는 아무 작업도 수행하지 않습니다.
   },
 };
