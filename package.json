@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "npm run migrate && npm run seed:reset && node src/app.js",
+    "start": "npm run seed:reset && node src/app.js",
     "migrate": "npx sequelize-cli db:migrate",
     "seed": "npx sequelize-cli db:seed:all",
     "seed:reset": "npx sequelize-cli db:seed:undo:all && npm run seed",
