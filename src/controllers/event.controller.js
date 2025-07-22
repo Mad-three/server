@@ -311,9 +311,19 @@ exports.addEventToNaverCalendar = async (req, res) => {
     const user = await db.User.findByPk(userId);
     const event = await Event.findByPk(eventId);
 
-    if (!user) return res.status(404).send({ message: "사용자를 찾을 수 없습니다." });
-    if (!event) return res.status(404).send({ message: "이벤트를 찾을 수 없습니다." });
+    if (!user || !event) {
+        return res.status(404).send({ message: "사용자를 찾을 수 없습니다." });
+    }
     if (!user.naverAccessToken) return res.status(400).send({ message: "네이버 연동 정보가 없습니다. 다시 로그인하여 연동해주세요." });
+
+    // ★★★ 바로 이 부분에서 명시적으로 Date 객체로 변환합니다. ★★★
+    const startDate = new Date(event.startAt);
+    const endDate = new Date(event.endAt);
+
+    // 유효한 Date 객체인지 확인하는 방어 코드 추가
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(500).send({ message: '이벤트의 날짜 형식이 올바르지 않습니다.' });
+    }
 
     const decryptedAccessToken = cryptoUtil.decrypt(user.naverAccessToken);
 
@@ -335,14 +345,14 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'BEGIN:VEVENT',
         `UID:${uuidv4()}@eventmap.com`, // UID를 더 고유하게 변경하는 것을 추천
         // toNaverCalendarFormat 함수를 사용하여 날짜 형식을 올바르게 변환합니다.
-        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(event.startAt)}`,
-        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(event.endAt)}`,
+        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(startDate)}`,
+        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(endDate)}`,
         `SUMMARY:${event.title}`,
         `DESCRIPTION:${event.description || ''}`,
         `LOCATION:${event.location || ''}`,
         'END:VEVENT',
         'END:VCALENDAR'
-      ].join('\\n');
+      ].join('\\r\\n'); // 줄바꿈 문자도 \r\n으로 수정하는 것을 추천
 
       const apiUrl = 'https://openapi.naver.com/calendar/createSchedule.json';
       const headers = {
