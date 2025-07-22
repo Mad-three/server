@@ -4,6 +4,25 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const cryptoUtil = require('../utils/crypto.util');
 
+/**
+ * JavaScript Date 객체를 'YYYYMMDDTHHMMSS' 형식의 KST 문자열로 변환하는 헬퍼 함수
+ * @param {Date} date - 변환할 Date 객체
+ * @returns {string} 'YYYYMMDDTHHMMSS' 형식의 문자열
+ */
+function toNaverCalendarFormat(date) {
+  const pad = (num) => num.toString().padStart(2, '0');
+
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+
+  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+}
+
+
 const sequelize = db.sequelize;
 const Event = db.Event;
 const Category = db.Category;
@@ -302,7 +321,7 @@ exports.addEventToNaverCalendar = async (req, res) => {
       const scheduleIcalString = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:Naver Calendar',
+        'PRODID:EventMap', // PRODID를 서비스 이름으로 변경하는 것을 추천
         'CALSCALE:GREGORIAN',
         'BEGIN:VTIMEZONE',
         'TZID:Asia/Seoul',
@@ -314,9 +333,10 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'END:STANDARD',
         'END:VTIMEZONE',
         'BEGIN:VEVENT',
-        `UID:${uuidv4()}`,
-        `DTSTART;TZID=Asia/Seoul:${event.startAt.toISOString().replace(/[-:.]/g, '').slice(0, 15)}`,
-        `DTEND;TZID=Asia/Seoul:${event.endAt.toISOString().replace(/[-:.]/g, '').slice(0, 15)}`,
+        `UID:${uuidv4()}@eventmap.com`, // UID를 더 고유하게 변경하는 것을 추천
+        // toNaverCalendarFormat 함수를 사용하여 날짜 형식을 올바르게 변환합니다.
+        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(event.startAt)}`,
+        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(event.endAt)}`,
         `SUMMARY:${event.title}`,
         `DESCRIPTION:${event.description || ''}`,
         `LOCATION:${event.location || ''}`,
@@ -325,10 +345,18 @@ exports.addEventToNaverCalendar = async (req, res) => {
       ].join('\\n');
 
       const apiUrl = 'https://openapi.naver.com/calendar/createSchedule.json';
-      const headers = { 'Authorization': `Bearer ${accessToken}` };
-      const data = { 'calendarId': 'defaultCalendarId', 'scheduleIcalString': scheduleIcalString };
+      const headers = {
+        'Authorization': `Bearer ${accessToken}`,
+        // 공식 문서에서 요구하는 Content-Type을 명시적으로 설정합니다.
+        'Content-Type': 'application/x-www-form-urlencoded'
+      };
 
-      return await axios.post(apiUrl, new URLSearchParams(data), { headers });
+      const data = {
+        calendarId: 'defaultCalendarId',
+        scheduleIcalString: scheduleIcalString
+      };
+
+      return await axios.post(apiUrl, data, { headers });
     };
 
     try {
