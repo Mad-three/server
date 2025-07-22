@@ -8,14 +8,14 @@ const getCoordsFromAddress = async (req, res) => {
   }
 
   try {
-    const response = await axios.get('https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode', {
+    const response = await axios.get('https://naveropenapi.apigw.gov-ntruss.com/map-geocode/v2/geocode', {
       params: {
         query: address,
       },
       headers: {
         'Accept': 'application/json',
-        'X-NCP-APIGW-API-KEY-ID': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID,
-        'X-NCP-APIGW-API-KEY': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_SECRET,
+        'x-ncp-apigw-api-key-id': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID,
+        'x-ncp-apigw-api-key': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_SECRET,
       },
     });
 
