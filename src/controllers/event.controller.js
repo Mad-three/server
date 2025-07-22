@@ -1,5 +1,5 @@
 const db = require('../models');
-const { Op } = require('sequelize'); // 연산자(Operator) 불러오기
+const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const cryptoUtil = require('../utils/crypto.util');
@@ -9,17 +9,18 @@ const Event = db.Event;
 const Category = db.Category;
 const User = db.User;
 
-// 1. 새 이벤트 생성 (POST /api/events)
+
+// 1. 새 이벤트 생성 (POST /api/events) - 트랜잭션은 유지
 exports.create = async (req, res) => {
   const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
   const userId = req.user.userId;
-
-  // req.file 객체에서 파일 정보를 확인
   const imageUrl = req.file ? `/${req.file.path.replace(/\\/g, '/')}` : null;
 
   if (!title || !startAt || !endAt || !longitude || !latitude) {
     return res.status(400).send({ message: '필수 필드(title, startAt, endAt, longitude, latitude)를 모두 입력해야 합니다.' });
   }
+
+  const t = await sequelize.transaction();
 
   try {
     const event = await Event.create({
@@ -32,104 +33,96 @@ exports.create = async (req, res) => {
       longitude,
       latitude,
       location
-    });
+    }, { transaction: t });
 
+    // [롤백] categoryIds가 배열 형태로 온다고 가정 (기존 로직)
     if (categoryIds && categoryIds.length > 0) {
       const categories = await Category.findAll({
-        where: {
-          categoryId: {
-            [Op.in]: categoryIds,
-          },
-        },
+        where: { categoryId: { [Op.in]: categoryIds } },
+        transaction: t
       });
-      await event.setCategories(categories);
+      await event.setCategories(categories, { transaction: t });
     }
 
+    await t.commit();
     res.status(201).send(event);
   } catch (error) {
+    await t.rollback();
     console.error('이벤트 생성 중 에러 발생:', error);
     res.status(500).send({ message: '서버 내부 오류가 발생했습니다.' });
   }
 };
 
-// 2. 모든 이벤트 조회 (GET /api/events)
+// 2. 모든 이벤트 조회 (GET /api/events) - 페이지네이션 롤백, SQL Injection 방지는 유지
 exports.findAll = async (req, res) => {
   const loggedInUserId = req.user ? req.user.userId : null;
 
   try {
-    const events = await Event.findAll({
+    const findOptions = {
       attributes: [
-        'eventId', 'title', 'startAt', 'longitude', 'latitude',
-        [
-          sequelize.literal(`(SELECT COUNT(*) FROM Likes WHERE Likes.eventId = Event.eventId)`),
-          'likeCount'
-        ],
-        loggedInUserId ? [
-          sequelize.literal(`(EXISTS (SELECT 1 FROM Likes WHERE Likes.eventId = Event.eventId AND Likes.userId = ${loggedInUserId}))`),
-          'isLiked'
-        ] : [sequelize.literal('false'), 'isLiked']
+        'eventId', 'title', 'startAt', 'longitude', 'latitude', 'imageUrl', 'location',
+        [sequelize.literal(`(SELECT COUNT(*) FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId")`), 'likeCount']
       ],
       include: [
-        {
-          model: Category,
-          attributes: ['categoryId', 'name'],
-          through: { attributes: [] }
-        },
-        {
-          model: User,
-          as: 'Author',
-          attributes: ['userId', 'name']
-        }
+        { model: Category, attributes: ['categoryId', 'name'], through: { attributes: [] } },
+        { model: User, as: 'Author', attributes: ['userId', 'name'] }
       ],
-    });
+      order: [['createdAt', 'DESC']],
+    };
+
+    // [보안 유지] SQL Injection 방지를 위해 replacements 사용
+    if (loggedInUserId) {
+      findOptions.attributes.push([
+        sequelize.literal(`(EXISTS (SELECT 1 FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId" AND "Likes"."userId" = :userId))`),
+        'isLiked'
+      ]);
+      findOptions.replacements = { userId: loggedInUserId };
+    } else {
+      findOptions.attributes.push([sequelize.literal('false'), 'isLiked']);
+    }
+
+    const events = await Event.findAll(findOptions);
     res.status(200).send(events);
   } catch (error) {
-    res.status(500).send({
-      message: error.message || "이벤트를 조회하는 동안 에러가 발생했습니다."
-    });
+    res.status(500).send({ message: error.message || "이벤트를 조회하는 동안 에러가 발생했습니다." });
   }
 };
 
-// 3. 특정 이벤트 상세 조회 (GET /api/events/:eventId)
+// 3. 특정 이벤트 상세 조회 (GET /api/events/:eventId) - SQL Injection 방지는 유지
 exports.findOne = async (req, res) => {
   const { eventId } = req.params;
   const loggedInUserId = req.user ? req.user.userId : null;
 
   try {
-    const event = await Event.findByPk(eventId, {
-      attributes: {
-        include: [
-          [
-            sequelize.literal(`(SELECT COUNT(*) FROM Likes WHERE Likes.eventId = Event.eventId)`),
-            'likeCount'
-          ],
-          loggedInUserId ? [
-            sequelize.literal(`(EXISTS (SELECT 1 FROM Likes WHERE Likes.eventId = Event.eventId AND Likes.userId = ${loggedInUserId}))`),
-            'isLiked'
-          ] : [sequelize.literal('false'), 'isLiked']
-        ]
-      },
+    const findOptions = {
       include: [
+        { model: Category, attributes: ['categoryId', 'name'], through: { attributes: [] } },
+        { model: User, as: 'Author', attributes: ['userId', 'name', 'email'] },
         {
-          model: Category,
-          attributes: ['categoryId', 'name'],
-          through: { attributes: [] }
-        },
-        {
-          model: User,
-          as: 'Author',
-          attributes: ['userId', 'name', 'email'] // 작성자 이메일도 포함
-        },
-        {
-          model: db.Review, // 후기 목록 포함
-          include: {
-            model: User, // 후기 작성자 정보 포함
-            attributes: ['userId', 'name']
-          },
+          model: db.Review,
+          include: { model: User, attributes: ['userId', 'name'] },
           order: [['createdAt', 'DESC']]
         }
-      ]
-    });
+      ],
+      attributes: {
+        include: [
+          [sequelize.literal(`(SELECT COUNT(*) FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId")`), 'likeCount']
+        ]
+      }
+    };
+
+    // [보안 유지] SQL Injection 방지를 위해 replacements 사용
+    if (loggedInUserId) {
+      findOptions.attributes.include.push([
+        sequelize.literal(`(EXISTS (SELECT 1 FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId" AND "Likes"."userId" = :userId))`),
+        'isLiked'
+      ]);
+      findOptions.replacements = { userId: loggedInUserId };
+    } else {
+      findOptions.attributes.include.push([sequelize.literal('false'), 'isLiked']);
+    }
+
+    const event = await Event.findByPk(eventId, findOptions);
 
     if (event) {
       res.status(200).send(event);
@@ -137,35 +130,28 @@ exports.findOne = async (req, res) => {
       res.status(404).send({ message: "해당 이벤트를 찾을 수 없습니다." });
     }
   } catch (error) {
-    res.status(500).send({
-      message: "이벤트를 조회하는 동안 에러가 발생했습니다."
-    });
+    res.status(500).send({ message: "이벤트를 조회하는 동안 에러가 발생했습니다." });
   }
 };
 
-// 4. 이벤트 '좋아요' 추가 (POST /api/events/:eventId/like)
+// 4. 이벤트 '좋아요' 추가 (POST /api/events/:eventId/like) - 변경 없음
 exports.likeEvent = async (req, res) => {
   const { eventId } = req.params;
-  const { userId } = req.user; // 인증된 사용자 ID
+  const { userId } = req.user;
 
   try {
     const event = await Event.findByPk(eventId);
     if (!event) {
       return res.status(404).send({ message: "이벤트를 찾을 수 없습니다." });
     }
-
-    // 사용자와 이벤트를 Likes 테이블에 추가 (이미 있으면 무시)
     await event.addLikingUsers(userId);
-
     res.status(200).send({ message: "좋아요를 눌렀습니다." });
   } catch (error) {
-    res.status(500).send({
-      message: "좋아요 처리 중 에러가 발생했습니다."
-    });
+    res.status(500).send({ message: "좋아요 처리 중 에러가 발생했습니다." });
   }
 };
 
-// 5. 이벤트 '좋아요' 취소 (DELETE /api/events/:eventId/like)
+// 5. 이벤트 '좋아요' 취소 (DELETE /api/events/:eventId/like) - 변경 없음
 exports.unlikeEvent = async (req, res) => {
   const { eventId } = req.params;
   const { userId } = req.user;
@@ -175,68 +161,63 @@ exports.unlikeEvent = async (req, res) => {
     if (!event) {
       return res.status(404).send({ message: "이벤트를 찾을 수 없습니다." });
     }
-
-    // Likes 테이블에서 해당 관계 제거
     await event.removeLikingUsers(userId);
-
     res.status(200).send({ message: "좋아요를 취소했습니다." });
   } catch (error) {
-    res.status(500).send({
-      message: "좋아요 취소 처리 중 에러가 발생했습니다."
-    });
+    res.status(500).send({ message: "좋아요 취소 처리 중 에러가 발생했습니다." });
   }
 };
 
-// 6. 이벤트 수정 (PUT /api/events/:eventId)
+// 6. 이벤트 수정 (PUT /api/events/:eventId) - 트랜잭션은 유지, 이미지 삭제 롤백, 파싱 롤백
 exports.updateEvent = async (req, res) => {
   const { eventId } = req.params;
   const { userId } = req.user;
   const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
   const imageUrl = req.file ? `/${req.file.path.replace(/\\/g, '/')}` : undefined;
 
+  const t = await sequelize.transaction();
+
   try {
-    const event = await Event.findByPk(eventId);
+    const event = await Event.findByPk(eventId, { transaction: t });
 
     if (!event) {
+      await t.rollback();
       return res.status(404).send({ message: '이벤트를 찾을 수 없습니다.' });
     }
 
     if (event.userId !== userId) {
+      await t.rollback();
       return res.status(403).send({ message: '이벤트를 수정할 권한이 없습니다.' });
     }
 
-    const updateData = {
-      title,
-      description,
-      startAt,
-      endAt,
-      longitude,
-      latitude,
-      location,
-    };
-
+    const updateData = { title, description, startAt, endAt, longitude, latitude, location };
+    
+    // [롤백] 이미지 수정 로직 (새 파일 업로드 시에만 변경)
     if (imageUrl !== undefined) {
       updateData.imageUrl = imageUrl;
     }
 
+    await event.update(updateData, { transaction: t });
 
-    await event.update(updateData);
-
+    // [롤백] categoryIds가 넘어온 경우, 안전하지 않은 기존 파싱 방식 사용
     if (categoryIds) {
-      const categories = await Category.findAll({
+      const categories = await Category.findAll({ 
         where: { categoryId: { [Op.in]: JSON.parse(categoryIds) } },
+        transaction: t
       });
-      await event.setCategories(categories);
+      await event.setCategories(categories, { transaction: t });
     }
 
+    await t.commit();
     res.status(200).send(event);
   } catch (error) {
+    await t.rollback();
     console.error('이벤트 수정 중 에러 발생:', error);
     res.status(500).send({ message: '서버 내부 오류가 발생했습니다.' });
   }
 };
 
-// 7. 이벤트 삭제 (DELETE /api/events/:eventId)
+// 7. 이벤트 삭제 (DELETE /api/events/:eventId) - 변경 없음
 exports.deleteEvent = async (req, res) => {
   const { eventId } = req.params;
   const { userId } = req.user;
@@ -248,13 +229,11 @@ exports.deleteEvent = async (req, res) => {
       return res.status(404).send({ message: "삭제할 이벤트를 찾을 수 없습니다." });
     }
 
-    // 권한 검사
     if (event.userId !== userId) {
       return res.status(403).send({ message: "이벤트를 삭제할 권한이 없습니다." });
     }
 
     await event.destroy();
-
     res.status(200).send({ message: "이벤트가 성공적으로 삭제되었습니다." });
   } catch (error) {
     console.error(`Error deleting event: ${error.message}`);
@@ -262,6 +241,8 @@ exports.deleteEvent = async (req, res) => {
   }
 };
 
+
+// 네이버 캘린더 연동 함수 - 변경 없음
 /**
  * [HELPER] 네이버 토큰을 갱신하고 원래 요청을 재시도하는 함수
  * @param {object} user - 사용자 모델 인스턴스
@@ -285,12 +266,10 @@ const refreshNaverTokenAndRetry = async (user, originalRequest) => {
       throw new Error('새로운 액세스 토큰을 발급받지 못했습니다.');
     }
 
-    // DB에 새로운 액세스 토큰 저장 (암호화)
     user.naverAccessToken = cryptoUtil.encrypt(access_token);
     await user.save();
     console.log('새로운 네이버 액세스 토큰을 저장했습니다.');
 
-    // 원래 요청 재시도
     return await originalRequest(access_token);
   } catch (error) {
     console.error('네이버 토큰 갱신 중 오류 발생:', error.response ? error.response.data : error.message);
@@ -317,7 +296,6 @@ exports.addEventToNaverCalendar = async (req, res) => {
 
     const decryptedAccessToken = cryptoUtil.decrypt(user.naverAccessToken);
 
-    // 네이버 캘린더 API에 요청을 보내는 함수
     const apiRequest = async (accessToken) => {
       const scheduleIcalString = [
         'BEGIN:VCALENDAR',
@@ -352,18 +330,14 @@ exports.addEventToNaverCalendar = async (req, res) => {
     };
 
     try {
-      // 1. 첫 번째 시도
       const response = await apiRequest(decryptedAccessToken);
       return res.status(201).send({ message: '네이버 캘린더에 일정이 성공적으로 추가되었습니다.', result: response.data });
     } catch (error) {
-      // 401 Unauthorized 에러는 토큰 만료를 의미할 수 있음
       if (error.response && error.response.status === 401) {
         console.log('액세스 토큰 만료. 토큰 갱신 후 재시도합니다.');
-        // 2. 토큰 갱신 및 재시도
         const response = await refreshNaverTokenAndRetry(user, apiRequest);
         return res.status(201).send({ message: '토큰 갱신 후, 네이버 캘린더에 일정이 성공적으로 추가되었습니다.', result: response.data });
       }
-      // 그 외 다른 에러
       throw error;
     }
   } catch (error) {
