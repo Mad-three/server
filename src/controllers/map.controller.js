@@ -13,6 +13,7 @@ const getCoordsFromAddress = async (req, res) => {
         query: address,
       },
       headers: {
+        'Accept': 'application/json',
         'X-NCP-APIGW-API-KEY-ID': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID,
         'X-NCP-APIGW-API-KEY': process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_SECRET,
       },
