@@ -32,7 +32,7 @@ exports.getMyAuthoredEvents = async (req, res) => {
     const events = await db.Event.findAll({
       where: { userId: userId },
       // 필요한 정보만 간추려서 반환 (예: 제목, 시작일, 좋아요 수)
-      attributes: ['eventId', 'title', 'startAt', 'location'],
+      attributes: ['eventId', 'title', 'startAt', 'endAt', 'location'],
       order: [['createdAt', 'DESC']], // 최신순으로 정렬
     });
 
@@ -54,7 +54,7 @@ exports.getMyLikedEvents = async (req, res) => {
       include: [{
         model: db.Event,
         as: 'LikedEvents',
-        attributes: ['eventId', 'title', 'startAt', 'location'],
+        attributes: ['eventId', 'title', 'startAt', 'endAt', 'location'],
         through: { attributes: [] } // 연결 테이블(Likes)의 정보는 결과에 포함시키지 않음
       }],
       attributes: [] // User의 기본 정보는 필요 없으므로 제외
