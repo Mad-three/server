@@ -60,6 +60,8 @@ exports.searchEvents = async (req, res) => {
       events: rows,
     });
   } catch (error) {
+    // 👇 이 코드가 Render 로그에 에러의 상세 내용을 출력합니다.
+    console.error("이벤트 검색 중 에러가 발생했습니다.", error);
     res.status(500).send({
       message: "이벤트 검색 중 에러가 발생했습니다."
     });
