@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const cryptoUtil = require('../utils/crypto.util');
+const { uploadToGCS } = require('../utils/gcs.util'); // GCS 유틸 함수 import
 
 /**
  * JavaScript Date 객체를 'YYYYMMDDTHHMMSS' 형식의 KST 문자열로 변환합니다.
@@ -36,23 +37,25 @@ const User = db.User;
 
 // 1. 새 이벤트 생성 (POST /api/events) - 트랜잭션은 유지
 exports.create = async (req, res) => {
-  console.log('Received request body:', req.body);
-  const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
-  const userId = req.user.userId;
-  const imageUrl = req.file ? `/${req.file.path.replace(/\\/g, '/')}` : null;
-
-  if (!title || !startAt || !endAt || !longitude || !latitude) {
-    return res.status(400).send({ message: '필수 필드(title, startAt, endAt, longitude, latitude)를 모두 입력해야 합니다.' });
-  }
-
+  // imageUrl을 req.file.path 대신 GCS 업로드 결과로 받습니다.
   const t = await sequelize.transaction();
-
+  
   try {
+    // GCS에 먼저 이미지 업로드 시도
+    const imageUrl = await uploadToGCS(req.file);
+
+    const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
+    const userId = req.user.userId;
+
+    if (!title || !startAt || !endAt || !longitude || !latitude) {
+      return res.status(400).send({ message: '필수 필드(title, startAt, endAt, longitude, latitude)를 모두 입력해야 합니다.' });
+    }
+
     const event = await Event.create({
       userId,
       title,
       description,
-      imageUrl,
+      imageUrl, // GCS에서 받은 URL을 DB에 저장
       startAt,
       endAt,
       longitude,
@@ -200,7 +203,6 @@ exports.updateEvent = async (req, res) => {
   const { eventId } = req.params;
   const { userId } = req.user;
   const { title, description, startAt, endAt, longitude, latitude, location, categoryIds } = req.body;
-  const imageUrl = req.file ? `/${req.file.path.replace(/\\/g, '/')}` : undefined;
 
   const t = await sequelize.transaction();
 
@@ -217,26 +219,31 @@ exports.updateEvent = async (req, res) => {
       return res.status(403).send({ message: '이벤트를 수정할 권한이 없습니다.' });
     }
 
-    const updateData = { title, description, startAt, endAt, longitude, latitude, location };
+    // 새 파일이 있는 경우에만 GCS에 업로드하고 imageUrl을 업데이트합니다.
+    let imageUrl;
+    if (req.file) {
+      imageUrl = await uploadToGCS(req.file);
+    }
     
-    // [롤백] 이미지 수정 로직 (새 파일 업로드 시에만 변경)
-    if (imageUrl !== undefined) {
+    const updateData = { title, description, startAt, endAt, longitude, latitude, location };
+    if (imageUrl) {
       updateData.imageUrl = imageUrl;
     }
 
     await event.update(updateData, { transaction: t });
 
-    // [롤백] categoryIds가 넘어온 경우, 안전하지 않은 기존 파싱 방식 사용
     if (categoryIds) {
+      const parsedCategoryIds = JSON.parse(categoryIds);
       const categories = await Category.findAll({ 
-        where: { categoryId: { [Op.in]: JSON.parse(categoryIds) } },
+        where: { categoryId: { [Op.in]: parsedCategoryIds } },
         transaction: t
       });
       await event.setCategories(categories, { transaction: t });
     }
 
     await t.commit();
-    res.status(200).send(event);
+    const updatedEvent = await Event.findByPk(eventId); // 업데이트된 정보를 다시 조회
+    res.status(200).send(updatedEvent);
   } catch (error) {
     await t.rollback();
     console.error('이벤트 수정 중 에러 발생:', error);
