@@ -365,6 +365,7 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'VERSION:2.0',
         'PRODID:EventMap/1.0',
         'CALSCALE:GREGORIAN',
+        // VTIMEZONE 블록은 그대로 유지
         'BEGIN:VTIMEZONE',
         'TZID:Asia/Seoul',
         'BEGIN:STANDARD',
@@ -374,16 +375,22 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'TZOFFSETTO:+0900',
         'END:STANDARD',
         'END:VTIMEZONE',
+        // VEVENT 블록에 필수 속성 추가
         'BEGIN:VEVENT',
-        `UID:${uuidv4()}@eventmap.com`,
-        `DTSTART;TZID=Asia/Seoul:${formattedStartDate}`,
-        `DTEND;TZID=Asia/Seoul:${formattedEndDate}`,
-        `SUMMARY:${event.title}`,
-        `DESCRIPTION:${event.description || ''}`,
-        `LOCATION:${event.location || ''}`,
+        'SEQUENCE:0', // ★★★ 추가
+        'CLASS:PUBLIC', // ★★★ 추가
+        'TRANSP:OPAQUE', // ★★★ 추가
+        'UID:' + uuidv4() + '@eventmap.com', // UID는 이전과 동일
+        'DTSTART;TZID=Asia/Seoul:' + toNaverCalendarFormat(startDate),
+        'DTEND;TZID=Asia/Seoul:' + toNaverCalendarFormat(endDate),
+        'SUMMARY:' + event.title,
+        'DESCRIPTION:' + (event.description || ''),
+        'LOCATION:' + (event.location || ''),
+        // DTSTAMP 추가 (현재 시간으로 설정)
+        'DTSTAMP:' + new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z', // ★★★ 추가
         'END:VEVENT',
         'END:VCALENDAR'
-      ].join('\\r\\n');
+      ].join('\r\n');
 
       // ======================= 상세 추적 로그 시작 =======================
       console.log(`[DEBUG 4/5] 네이버 API로 보낼 최종 iCal 데이터:\n`, scheduleIcalString);
