@@ -12,7 +12,11 @@ const mapRoutes = require('./routes/map.routes'); // map.routes.js 임포트
 
 const app = express();
 const port = process.env.PORT || 3001;
-const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://event-map-client.vercel.app' // Vercel 클라이언트 주소 추가
+];
 if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
