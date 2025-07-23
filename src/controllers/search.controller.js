@@ -32,11 +32,13 @@ exports.searchEvents = async (req, res) => {
       attributes: {
         include: [
           [
-            sequelize.literal(`(SELECT COUNT(*) FROM Likes WHERE Likes.eventId = Event.eventId)`),
+            // PostgreSQL은 테이블명을 기본적으로 소문자로 처리하므로,
+            // 모델명 기반의 대문자 포함 테이블명("Likes")을 사용하려면 큰따옴표로 묶어줘야 합니다.
+            sequelize.literal(`(SELECT COUNT(*) FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId")`),
             'likeCount'
           ],
           loggedInUserId ? [
-            sequelize.literal(`(EXISTS (SELECT 1 FROM Likes WHERE Likes.eventId = Event.eventId AND Likes.userId = ${loggedInUserId}))`),
+            sequelize.literal(`(EXISTS (SELECT 1 FROM "Likes" WHERE "Likes"."eventId" = "Event"."eventId" AND "Likes"."userId" = ${loggedInUserId}))`),
             'isLiked'
           ] : [sequelize.literal('false'), 'isLiked']
         ]
