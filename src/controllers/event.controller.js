@@ -321,24 +321,49 @@ exports.addEventToNaverCalendar = async (req, res) => {
     if (!event) return res.status(404).send({ message: "이벤트를 찾을 수 없습니다." });
     if (!user.naverAccessToken) return res.status(400).send({ message: "네이버 연동 정보가 없습니다. 다시 로그인하여 연동해주세요." });
 
-    // 1. DB에서 온 값이 문자열일 경우를 대비해 명시적으로 Date 객체로 변환
+    // ======================= 상세 추적 로그 시작 =======================
+    console.log(`[DEBUG 1/5] DB에서 가져온 원본 데이터:`, { 
+      startAt: event.startAt, 
+      endAt: event.endAt,
+      startAt_Type: typeof event.startAt,
+      endAt_Type: typeof event.endAt,
+    });
+    // ================================================================
+
     const startDate = new Date(event.startAt);
     const endDate = new Date(event.endAt);
 
-    // 2. 날짜 유효성 검사 (Invalid Date 방지)
+    // ======================= 상세 추적 로그 시작 =======================
+    console.log(`[DEBUG 2/5] new Date() 변환 결과:`, {
+      startDate: startDate.toString(),
+      endDate: endDate.toString(),
+    });
+    // ================================================================
+
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      console.error(`Invalid date format for eventId: ${eventId}`, { startAt: event.startAt, endAt: event.endAt });
+      console.error(`[DEBUG ERROR] 날짜 변환 실패! Invalid Date가 생성되었습니다.`, {
+        isStartDateNaN: isNaN(startDate.getTime()),
+        isEndDateNaN: isNaN(endDate.getTime()),
+      });
       return res.status(500).send({ message: '이벤트의 날짜 형식이 올바르지 않습니다.' });
     }
 
     const decryptedAccessToken = cryptoUtil.decrypt(user.naverAccessToken);
 
     const apiRequest = async (accessToken) => {
-      // 3. iCalendar 데이터 생성 (모든 규격 수정)
+      // ======================= 상세 추적 로그 시작 =======================
+      const formattedStartDate = toNaverCalendarFormat(startDate);
+      const formattedEndDate = toNaverCalendarFormat(endDate);
+      console.log(`[DEBUG 3/5] Naver 형식 변환 결과:`, {
+        formattedStartDate,
+        formattedEndDate,
+      });
+      // ================================================================
+      
       const scheduleIcalString = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
-        'PRODID:EventMap/1.0', // 고유한 PRODID로 수정
+        'PRODID:EventMap/1.0',
         'CALSCALE:GREGORIAN',
         'BEGIN:VTIMEZONE',
         'TZID:Asia/Seoul',
@@ -350,36 +375,37 @@ exports.addEventToNaverCalendar = async (req, res) => {
         'END:STANDARD',
         'END:VTIMEZONE',
         'BEGIN:VEVENT',
-        `UID:${uuidv4()}@eventmap.com`, // UID를 더 고유한 형식으로 수정
-        `DTSTART;TZID=Asia/Seoul:${toNaverCalendarFormat(startDate)}`, // 날짜 형식 수정
-        `DTEND;TZID=Asia/Seoul:${toNaverCalendarFormat(endDate)}`,     // 날짜 형식 수정
+        `UID:${uuidv4()}@eventmap.com`,
+        `DTSTART;TZID=Asia/Seoul:${formattedStartDate}`,
+        `DTEND;TZID=Asia/Seoul:${formattedEndDate}`,
         `SUMMARY:${event.title}`,
         `DESCRIPTION:${event.description || ''}`,
         `LOCATION:${event.location || ''}`,
         'END:VEVENT',
         'END:VCALENDAR'
-      ].join('\\r\\n'); // 줄바꿈 문자를 표준인 \r\n으로 수정
+      ].join('\\r\\n');
 
-      // 4. API 요청 형식 수정 (공식 문서 기준)
+      // ======================= 상세 추적 로그 시작 =======================
+      console.log(`[DEBUG 4/5] 네이버 API로 보낼 최종 iCal 데이터:\n`, scheduleIcalString);
+      // ================================================================
+
       const apiUrl = 'https://openapi.naver.com/calendar/createSchedule.json';
-      
       const params = new URLSearchParams();
       params.append('calendarId', 'defaultCalendarId');
       params.append('scheduleIcalString', scheduleIcalString);
-
       const headers = {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
       };
-
       return await axios.post(apiUrl, params, { headers });
     };
 
-    // ... (기존의 토큰 갱신 및 API 호출 로직)
     try {
       const response = await apiRequest(decryptedAccessToken);
+      console.log('[DEBUG 5/5][NAVER CALENDAR SUCCESS]', { status: response.status, data: response.data, eventId: eventId, userId: userId });
       return res.status(201).send({ message: '네이버 캘린더에 일정이 성공적으로 추가되었습니다.', result: response.data });
     } catch (error) {
+      console.error('[DEBUG 5/5][NAVER CALENDAR ERROR]', { status: error.response ? error.response.status : 'N/A', data: error.response ? error.response.data : error.message, eventId: eventId, userId: userId });
       if (error.response && error.response.status === 401) {
         console.log('액세스 토큰 만료. 토큰 갱신 후 재시도합니다.');
         const response = await refreshNaverTokenAndRetry(user, apiRequest);
@@ -387,12 +413,9 @@ exports.addEventToNaverCalendar = async (req, res) => {
       }
       throw error;
     }
-
   } catch (error) {
     console.error('네이버 캘린더 연동 중 에러:', error.response ? error.response.data : error.message);
-    const message = error.message.includes('토큰 갱신에 실패')
-      ? error.message
-      : '캘린더에 일정을 추가하는 동안 서버 오류가 발생했습니다.';
+    const message = error.message.includes('토큰 갱신에 실패') ? error.message : '캘린더에 일정을 추가하는 동안 서버 오류가 발생했습니다.';
     res.status(500).send({ message });
   }
 }; 
